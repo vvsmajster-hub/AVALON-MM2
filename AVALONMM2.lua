@@ -1,0 +1,489 @@
+-- Panel Avalon // MM2 z systemem klawiszy (Keybinds) oraz chowaniem GUI pod Shift
+-- Komentarze techniczne w języku polskim
+
+local Players = game:GetService("Players")
+local CoreGui = game:GetService("CoreGui")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local HttpService = game:GetService("HttpService")
+local Workspace = game:GetService("Workspace")
+local LocalPlayer = Players.LocalPlayer
+local Camera = Workspace.CurrentCamera
+
+if CoreGui:FindFirstChild("AvalonMM2License") then
+    CoreGui.AvalonMM2License:Destroy()
+end
+
+-- Zmienne stanu licencji i cheatów
+local isLicensed = false
+local espEnabled = false
+local espConnection = nil
+local flyEnabled = false
+local flySpeed = 50
+local invisEnabled = false
+local keysPressed = {W = false, A = false, S = false, D = false, Space = false, LeftControl = false}
+local bodyGyro, bodyVelocity = nil, nil
+local guiVisible = true
+
+-- Tablice do obsługi modułów i przypisanych klawiszy
+local ModuleStates = {
+    ESP = false,
+    Fly = false,
+    Invisibility = false
+}
+local Keybinds = {
+    ESP = nil,
+    Fly = nil,
+    Invisibility = nil
+}
+local ModuleButtons = {}
+local bindingModule = nil
+
+-- Link do work.ink
+local WorkInkLink = "https://work.ink/2Z0X/key-avalonmm2"
+local ApiEndpointUrl = "https://twojanazwa.pl/api/verify.php?key="
+
+-- Główny ScreenGui
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "AvalonMM2License"
+ScreenGui.Parent = CoreGui
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+-- ==================== OKNO LICENCJI (WORK.INK) ====================
+local LicenseWindow = Instance.new("Frame")
+LicenseWindow.Name = "LicenseWindow"
+LicenseWindow.Parent = ScreenGui
+LicenseWindow.BackgroundColor3 = Color3.fromRGB(15, 15, 18)
+LicenseWindow.BackgroundTransparency = 0.1
+LicenseWindow.Position = UDim2.new(0.5, -140, 0.5, -90)
+LicenseWindow.Size = UDim2.new(0, 280, 0, 180)
+LicenseWindow.Active = true
+LicenseWindow.Draggable = true
+
+local LicCorner = Instance.new("UICorner")
+LicCorner.CornerRadius = UDim.new(0, 6)
+LicCorner.Parent = LicenseWindow
+
+local LicStroke = Instance.new("UIStroke")
+LicStroke.Color = Color3.fromRGB(120, 80, 220)
+LicStroke.Thickness = 1.2
+LicStroke.Parent = LicenseWindow
+
+local LicHeader = Instance.new("Frame")
+LicHeader.Parent = LicenseWindow
+LicHeader.BackgroundColor3 = Color3.fromRGB(22, 22, 26)
+LicHeader.Size = UDim2.new(1, 0, 0, 30)
+
+local LicHeadCorner = Instance.new("UICorner")
+LicHeadCorner.CornerRadius = UDim.new(0, 6)
+LicHeadCorner.Parent = LicHeader
+
+local LicHeadFix = Instance.new("Frame")
+LicHeadFix.Parent = LicHeader
+LicHeadFix.BackgroundColor3 = Color3.fromRGB(22, 22, 26)
+LicHeadFix.BorderSizePixel = 0
+LicHeadFix.Position = UDim2.new(0, 0, 0.5, 0)
+LicHeadFix.Size = UDim2.new(1, 0, 0.5, 0)
+
+local LicTitle = Instance.new("TextLabel")
+LicTitle.Parent = LicHeader
+LicTitle.BackgroundTransparency = 1
+LicTitle.Position = UDim2.new(0, 10, 0, 0)
+LicTitle.Size = UDim2.new(1, -10, 1, 0)
+LicTitle.Font = Enum.Font.Code
+LicTitle.Text = "Avalon // Key System"
+LicTitle.TextColor3 = Color3.fromRGB(240, 240, 240)
+LicTitle.TextSize = 11
+LicTitle.TextXAlignment = Enum.TextXAlignment.Left
+
+local KeyBox = Instance.new("TextBox")
+KeyBox.Parent = LicenseWindow
+KeyBox.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+KeyBox.Position = UDim2.new(0, 20, 0, 55)
+KeyBox.Size = UDim2.new(1, -40, 0, 36)
+KeyBox.Font = Enum.Font.Code
+KeyBox.PlaceholderText = "Wklej klucz z work.ink..."
+KeyBox.Text = ""
+KeyBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+KeyBox.PlaceholderColor3 = Color3.fromRGB(120, 120, 120)
+KeyBox.TextSize = 12
+
+local KeyCorner = Instance.new("UICorner")
+KeyCorner.CornerRadius = UDim.new(0, 4)
+KeyCorner.Parent = KeyBox
+
+local GetKeyButton = Instance.new("TextButton")
+GetKeyButton.Parent = LicenseWindow
+GetKeyButton.BackgroundColor3 = Color3.fromRGB(35, 35, 42)
+GetKeyButton.Position = UDim2.new(0, 20, 0, 100)
+GetKeyButton.Size = UDim2.new(0, 115, 0, 30)
+GetKeyButton.Font = Enum.Font.Code
+GetKeyButton.Text = "Pobierz Klucz"
+GetKeyButton.TextColor3 = Color3.fromRGB(200, 200, 200)
+GetKeyButton.TextSize = 11
+
+local GetKeyCorner = Instance.new("UICorner")
+GetKeyCorner.CornerRadius = UDim.new(0, 4)
+GetKeyCorner.Parent = GetKeyButton
+
+local SubmitButton = Instance.new("TextButton")
+SubmitButton.Parent = LicenseWindow
+SubmitButton.BackgroundColor3 = Color3.fromRGB(110, 50, 200)
+SubmitButton.Position = UDim2.new(0, 145, 0, 100)
+SubmitButton.Size = UDim2.new(0, 115, 0, 30)
+SubmitButton.Font = Enum.Font.Code
+SubmitButton.Text = "Sprawdź"
+SubmitButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+SubmitButton.TextSize = 11
+
+local SubCorner = Instance.new("UICorner")
+SubCorner.CornerRadius = UDim.new(0, 4)
+SubCorner.Parent = SubmitButton
+
+local StatusLabel = Instance.new("TextLabel")
+StatusLabel.Parent = LicenseWindow
+StatusLabel.BackgroundTransparency = 1
+StatusLabel.Position = UDim2.new(0, 20, 0, 145)
+StatusLabel.Size = UDim2.new(1, -40, 0, 20)
+StatusLabel.Font = Enum.Font.Code
+StatusLabel.Text = "Status: Pobierz klucz z Work.ink"
+StatusLabel.TextColor3 = Color3.fromRGB(200, 50, 50)
+StatusLabel.TextSize = 10
+
+-- ==================== OKNA GŁÓWNE PANELU ====================
+local function CreateWindow(name, posX, posY, sizeY)
+    local Window = Instance.new("Frame")
+    Window.Name = name .. "Window"
+    Window.Parent = ScreenGui
+    Window.BackgroundColor3 = Color3.fromRGB(15, 15, 18)
+    Window.BackgroundTransparency = 0.15
+    Window.Position = UDim2.new(0, posX, 0, posY)
+    Window.Size = UDim2.new(0, 200, 0, sizeY)
+    Window.Active = true
+    Window.Draggable = true
+    Window.Visible = false
+
+    local Corner = Instance.new("UICorner")
+    Corner.CornerRadius = UDim.new(0, 4)
+    Corner.Parent = Window
+
+    local Stroke = Instance.new("UIStroke")
+    Stroke.Color = Color3.fromRGB(120, 80, 220)
+    Stroke.Thickness = 1.2
+    Stroke.Parent = Window
+
+    local Header = Instance.new("Frame")
+    Header.Name = "Header"
+    Header.Parent = Window
+    Header.BackgroundColor3 = Color3.fromRGB(22, 22, 26)
+    Header.Size = UDim2.new(1, 0, 0, 26)
+
+    local HeaderCorner = Instance.new("UICorner")
+    HeaderCorner.CornerRadius = UDim.new(0, 4)
+    HeaderCorner.Parent = Header
+
+    local HeaderFix = Instance.new("Frame")
+    HeaderFix.Parent = Header
+    HeaderFix.BackgroundColor3 = Color3.fromRGB(22, 22, 26)
+    HeaderFix.BorderSizePixel = 0
+    HeaderFix.Position = UDim2.new(0, 0, 0.5, 0)
+    HeaderFix.Size = UDim2.new(1, 0, 0.5, 0)
+
+    local Title = Instance.new("TextLabel")
+    Title.Parent = Header
+    Title.BackgroundTransparency = 1
+    Title.Position = UDim2.new(0, 8, 0, 0)
+    Title.Size = UDim2.new(1, -8, 1, 0)
+    Title.Font = Enum.Font.Code
+    Title.Text = name
+    Title.TextColor3 = Color3.fromRGB(240, 240, 240)
+    Title.TextSize = 13
+    Title.TextXAlignment = Enum.TextXAlignment.Left
+
+    return Window
+end
+
+local VisualsWin = CreateWindow("VISUALS", 50, 50, 100)
+local MovementWin = CreateWindow("MOVEMENT", 260, 50, 100)
+local PlayerWin = CreateWindow("PLAYER", 470, 50, 100)
+
+-- Główna funkcja wykonawcza modułów
+local function ApplyModuleAction(moduleKey, active)
+    ModuleStates[moduleKey] = active
+    local btn = ModuleButtons[moduleKey]
+
+    if btn then
+        if active then
+            btn.BackgroundColor3 = Color3.fromRGB(110, 50, 200)
+            btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        else
+            btn.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+            btn.TextColor3 = Color3.fromRGB(170, 170, 170)
+        end
+    end
+
+    if moduleKey == "ESP" then
+        espEnabled = active
+        if espEnabled then
+            espConnection = RunService.RenderStepped:Connect(function()
+                for _, player in ipairs(Players:GetPlayers()) do
+                    if player ~= LocalPlayer and player.Character then
+                        local character = player.Character
+                        if character:FindFirstChild("HumanoidRootPart") then
+                            local roleColor = Color3.fromRGB(46, 204, 113)
+                            local function check(c)
+                                if c then
+                                    for _, item in ipairs(c:GetChildren()) do
+                                        if item.Name == "Knife" then roleColor = Color3.fromRGB(231, 76, 60)
+                                        elseif item.Name == "Gun" then roleColor = Color3.fromRGB(52, 152, 219) end
+                                    end
+                                end
+                            end
+                            check(player:FindFirstChild("Backpack"))
+                            check(character)
+
+                            local hl = character:FindFirstChild("MM2Highlight")
+                            if not hl then
+                                hl = Instance.new("Highlight")
+                                hl.Name = "MM2Highlight"
+                                hl.Adornee = character
+                                hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+                                hl.Parent = character
+                            end
+                            hl.FillColor = roleColor
+                        end
+                    end
+                end
+            end)
+        else
+            if espConnection then espConnection:Disconnect() end
+            for _, player in ipairs(Players:GetPlayers()) do
+                if player.Character and player.Character:FindFirstChild("MM2Highlight") then
+                    player.Character.MM2Highlight:Destroy()
+                end
+            end
+        end
+    elseif moduleKey == "Fly" then
+        flyEnabled = active
+        local character = LocalPlayer.Character
+        if not character or not character:FindFirstChild("HumanoidRootPart") then return end
+        local rootPart = character.HumanoidRootPart
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+
+        if flyEnabled then
+            bodyVelocity = Instance.new("BodyVelocity")
+            bodyVelocity.Velocity = Vector3.new(0, 0, 0)
+            bodyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+            bodyVelocity.Parent = rootPart
+
+            bodyGyro = Instance.new("BodyGyro")
+            bodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+            bodyGyro.CFrame = rootPart.CFrame
+            bodyGyro.Parent = rootPart
+
+            if humanoid then humanoid.PlatformStand = true end
+
+            RunService.RenderStepped:Connect(function()
+                if not flyEnabled then return end
+                local moveDir = Vector3.new(0, 0, 0)
+                if keysPressed.W then moveDir = moveDir + Camera.CFrame.LookVector end
+                if keysPressed.S then moveDir = moveDir - Camera.CFrame.LookVector end
+                if keysPressed.A then moveDir = moveDir - Camera.CFrame.RightVector end
+                if keysPressed.D then moveDir = moveDir + Camera.CFrame.RightVector end
+                if keysPressed.Space then moveDir = moveDir + Vector3.new(0, 1, 0) end
+                if keysPressed.LeftControl then moveDir = moveDir - Vector3.new(0, 1, 0) end
+
+                bodyVelocity.Velocity = moveDir * flySpeed
+                bodyGyro.CFrame = Camera.CFrame
+            end)
+        else
+            if bodyVelocity then bodyVelocity:Destroy() end
+            if bodyGyro then bodyGyro:Destroy() end
+            if humanoid then humanoid.PlatformStand = false end
+        end
+    elseif moduleKey == "Invisibility" then
+        invisEnabled = active
+        pcall(function()
+            local character = LocalPlayer.Character
+            if not character then return end
+            for _, part in ipairs(character:GetDescendants()) do
+                if part:IsA("BasePart") or part:IsA("Decal") then
+                    if invisEnabled then
+                        part.Transparency = 1
+                    else
+                        if part.Name ~= "HumanoidRootPart" then
+                            part.Transparency = 0
+                        end
+                    end
+                end
+            end
+        end)
+    end
+end
+
+-- Tworzenie przycisków modułów i opcji keybindu
+local function CreateModuleButton(parent, text, moduleKey, posY)
+    local Btn = Instance.new("TextButton")
+    Btn.Parent = parent
+    Btn.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+    Btn.Position = UDim2.new(0, 8, 0, posY)
+    Btn.Size = UDim2.new(1, -64, 0, 28)
+    Btn.Font = Enum.Font.Code
+    Btn.Text = text
+    Btn.TextColor3 = Color3.fromRGB(170, 170, 170)
+    Btn.TextSize = 11
+    Btn.TextXAlignment = Enum.TextXAlignment.Left
+
+    local Padding = Instance.new("UIPadding")
+    Padding.PaddingLeft = UDim.new(0, 6)
+    Padding.Parent = Btn
+
+    local Corner = Instance.new("UICorner")
+    Corner.CornerRadius = UDim.new(0, 3)
+    Corner.Parent = Btn
+
+    ModuleButtons[moduleKey] = Btn
+
+    local BindBtn = Instance.new("TextButton")
+    BindBtn.Parent = parent
+    BindBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 42)
+    BindBtn.Position = UDim2.new(1, -52, 0, posY)
+    BindBtn.Size = UDim2.new(0, 44, 0, 28)
+    BindBtn.Font = Enum.Font.Code
+    BindBtn.Text = "[...]"
+    BindBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+    BindBtn.TextSize = 10
+
+    local BindCorner = Instance.new("UICorner")
+    BindCorner.CornerRadius = UDim.new(0, 3)
+    BindCorner.Parent = BindBtn
+
+    Btn.MouseButton1Click:Connect(function()
+        if not isLicensed then
+            StatusLabel.Text = "Błąd: Najpierw wpisz klucz!"
+            return
+        end
+        ApplyModuleAction(moduleKey, not ModuleStates[moduleKey])
+    end)
+
+    BindBtn.MouseButton1Click:Connect(function()
+        if not isLicensed then return end
+        BindBtn.Text = "press"
+        bindingModule = {
+            key = moduleKey,
+            bindButton = BindBtn
+        }
+    end)
+end
+
+CreateModuleButton(VisualsWin, "ESP (Roles)", "ESP", 34)
+CreateModuleButton(MovementWin, "Fly", "Fly", 34)
+CreateModuleButton(PlayerWin, "Invisibility", "Invisibility", 34)
+
+-- ==================== WORK.INK LOGIKA ====================
+GetKeyButton.MouseButton1Click:Connect(function()
+    pcall(function()
+        setclipboard(WorkInkLink)
+    end)
+    StatusLabel.TextColor3 = Color3.fromRGB(220, 180, 50)
+    StatusLabel.Text = "Skopiowano link Work.ink do schowka!"
+end)
+
+SubmitButton.MouseButton1Click:Connect(function()
+    local enteredKey = KeyBox.Text
+    if enteredKey == "" then
+        StatusLabel.TextColor3 = Color3.fromRGB(200, 50, 50)
+        StatusLabel.Text = "Wpisz klucz w pole tekstowe!"
+        return
+    end
+
+    StatusLabel.TextColor3 = Color3.fromRGB(200, 200, 50)
+    StatusLabel.Text = "Sprawdzanie klucza..."
+
+    task.spawn(function()
+        local success, response = pcall(function()
+            return HttpService:GetAsync(ApiEndpointUrl + HttpService:UrlEncode(enteredKey))
+        end)
+
+        if success then
+            local decodedSuccess, data = pcall(function()
+                return HttpService:JSONDecode(response)
+            end)
+
+            if decodedSuccess and (data.status == "success" or data.valid == true) then
+                isLicensed = true
+                StatusLabel.TextColor3 = Color3.fromRGB(50, 200, 50)
+                StatusLabel.Text = "Sukces! Zweryfikowano."
+                task.wait(1)
+                LicenseWindow:Destroy()
+                VisualsWin.Visible = true
+                MovementWin.Visible = true
+                PlayerWin.Visible = true
+            else
+                StatusLabel.TextColor3 = Color3.fromRGB(200, 50, 50)
+                StatusLabel.Text = "Niepoprawny lub wygasły klucz!"
+            end
+        else
+            if enteredKey == "AVALON-TEST" then
+                isLicensed = true
+                StatusLabel.TextColor3 = Color3.fromRGB(50, 200, 50)
+                StatusLabel.Text = "Tryb testowy: Zalogowano pomyślnie!"
+                task.wait(1)
+                LicenseWindow:Destroy()
+                VisualsWin.Visible = true
+                MovementWin.Visible = true
+                PlayerWin.Visible = true
+            else
+                StatusLabel.TextColor3 = Color3.fromRGB(200, 50, 50)
+                StatusLabel.Text = "Błąd API (wpisz AVALON-TEST jako test)."
+            end
+        end
+    end)
+end)
+
+-- ==================== OBSŁUGA KLAWISZY ====================
+UserInputService.InputBegan:Connect(function(input, gp)
+    if input.KeyCode == Enum.KeyCode.W then keysPressed.W = true end
+    if input.KeyCode == Enum.KeyCode.S then keysPressed.S = true end
+    if input.KeyCode == Enum.KeyCode.A then keysPressed.A = true end
+    if input.KeyCode == Enum.KeyCode.D then keysPressed.D = true end
+    if input.KeyCode == Enum.KeyCode.Space then keysPressed.Space = true end
+    if input.KeyCode == Enum.KeyCode.LeftControl then keysPressed.LeftControl = true end
+
+    -- Przypisywanie klawisza po kliknięciu [...]
+    if bindingModule and not gp then
+        Keybinds[bindingModule.key] = input.KeyCode
+        bindingModule.bindButton.Text = "[" .. input.KeyCode.Name .. "]"
+        bindingModule = nil
+        return
+    end
+
+    if gp then return end
+
+    -- Otwieranie / chowanie całego GUI pod klawiszem SHIFT (LeftShift lub RightShift)
+    if (input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.RightShift) and isLicensed then
+        guiVisible = not guiVisible
+        VisualsWin.Visible = guiVisible
+        MovementWin.Visible = guiVisible
+        PlayerWin.Visible = guiVisible
+        return
+    end
+
+    -- Aktywacja modułów za pomocą przypisanych klawiszy
+    if isLicensed then
+        for modName, boundKey in pairs(Keybinds) do
+            if boundKey and input.KeyCode == boundKey then
+                ApplyModuleAction(modName, not ModuleStates[modName])
+            end
+        end
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.KeyCode == Enum.KeyCode.W then keysPressed.W = false end
+    if input.KeyCode == Enum.KeyCode.S then keysPressed.S = false end
+    if input.KeyCode == Enum.KeyCode.A then keysPressed.A = false end
+    if input.KeyCode == Enum.KeyCode.D then keysPressed.D = false end
+    if input.KeyCode == Enum.KeyCode.Space then keysPressed.Space = false end
+    if input.KeyCode == Enum.KeyCode.LeftControl then keysPressed.LeftControl = false end
+end)
